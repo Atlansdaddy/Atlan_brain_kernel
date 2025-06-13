@@ -404,8 +404,8 @@ class AbstractingNodefield(ReinforcedNodefield):
 class SemanticAnalogicalNodefield(AbstractingNodefield):
     """Adds semantic linking and analogical reasoning"""
     
-    def __init__(self, initial_size: int = 10):
-        super().__init__(initial_size)
+    def __init__(self, initial_size: int = 10, **kwargs):
+        super().__init__(initial_size, **kwargs)
         self.semantic_links = []  # (from_symbol, to_symbol) pairs
         
     def add_semantic_link(self, from_symbol: str, to_symbol: str):
@@ -542,8 +542,8 @@ class ReflectiveNodefield(PredictiveNodefield):
 class IntentionNodefield(ReflectiveNodefield):
     """Adds value hierarchies and emergent intentions"""
     
-    def __init__(self, initial_size: int = 10):
-        super().__init__(initial_size)
+    def __init__(self, initial_size: int = 10, **kwargs):
+        super().__init__(initial_size, **kwargs)
         self.reinforcement_log = []
         
     def apply_rewards(self, rewards: Dict[str, float]) -> List[str]:
@@ -640,8 +640,8 @@ class FullCognitiveAgent(CuriosityNodefield):
     This is the full Atlan Brain Kernel
     """
     
-    def __init__(self, initial_size: int = 10):
-        super().__init__(initial_size)
+    def __init__(self, initial_size: int = 10, **kwargs):
+        super().__init__(initial_size, **kwargs)
         self.conflict_log = []
         self.selected_strategy = None
         self.identity_core = {}
