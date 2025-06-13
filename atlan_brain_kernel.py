@@ -104,64 +104,101 @@ class Nodefield:
         self.node_counter += 1
         return node
         
-    def propagate_resonance(self, source_position: Tuple[int, int, int],
-                          input_energy: float, importance_weight: float,
-                          dampening: float = 0.5) -> List[str]:
+    def propagate_resonance(
+        self,
+        source_position: Tuple[int, int, int],
+        input_energy: float,
+        importance_weight: float,
+        dampening: Optional[float] = None,
+    ) -> List[str]:
+        """Core mechanism of thought formation.
+
+        Parameters
+        ----------
+        source_position : tuple[int, int, int]
+            Coordinate of the originating node.
+        input_energy : float
+            Raw energy of the stimulus.
+        importance_weight : float
+            Modulates *input_energy* before propagation.
+        dampening : float | None, optional
+            Energy dampening factor. If *None*, fetches :pyattr:`CONFIG.dampening`.
         """
-        Propagate energy through the field based on distance and importance
-        This is the core mechanism of thought formation
-        """
-        logs = []
+
+        dampening = CONFIG.dampening if dampening is None else dampening
+
+        logs: List[str] = []
         global global_tick
-        logger.info(
-            "Propagating resonance | tick=%s source_pos=%s input_energy=%.4f importance=%.2f",
-            global_tick,
-            source_position,
-            input_energy,
-            importance_weight,
-        )
-        ε = 0.01  # small constant to avoid division by zero
-        
-        source_node = self.nodes[source_position]
-        weighted_input = input_energy * importance_weight
-        source_node.resonance_energy += weighted_input
-        source_node.last_tick = global_tick
-        
-        logs.append(f"Tick {global_tick}: Node {source_node.node_id} "
-                   f"'{source_node.symbolic_anchor}' received {weighted_input:.4f} "
-                   f"energy (W={importance_weight}). Total: {source_node.resonance_energy:.4f}")
-        
-        # Log memory event
-        self.memory_chain.append((global_tick, None, source_node.symbolic_anchor, weighted_input))
-        
-        # Propagate if threshold exceeded
-        if source_node.resonance_energy >= source_node.threshold:
-            for target in self.nodes.values():
-                if target == source_node:
-                    continue
-                    
-                distance = source_node.distance_to(target)
-                distance_factor = 1 / (distance**2 + ε)
-                transferred_energy = weighted_input * dampening * distance_factor
-                
-                target.resonance_energy += transferred_energy
-                target.last_tick = global_tick
-                
-                logs.append(f"Transferred {transferred_energy:.4f} to Node {target.node_id} "
-                           f"'{target.symbolic_anchor}' (Distance={distance:.2f})")
-                
-                # Log the propagation in memory
-                self.memory_chain.append((global_tick, source_node.symbolic_anchor,
-                                        target.symbolic_anchor, transferred_energy))
-        
-        # Apply decay to all nodes
-        for node in self.nodes.values():
-            before_decay = node.resonance_energy
-            node.resonance_energy *= (1 - node.decay_factor)
-            logs.append(f"Node {node.node_id} '{node.symbolic_anchor}' decayed "
-                       f"from {before_decay:.4f} to {node.resonance_energy:.4f}")
-            
-        return logs
+
+        try:
+            logger.info(
+                "Propagating resonance | tick=%s source_pos=%s input_energy=%.4f importance=%.2f",
+                global_tick,
+                source_position,
+                input_energy,
+                importance_weight,
+            )
+
+            epsilon = CONFIG.epsilon
+
+            source_node = self.nodes[source_position]
+            weighted_input = input_energy * importance_weight
+            source_node.resonance_energy += weighted_input
+            source_node.last_tick = global_tick
+
+            logs.append(
+                f"Tick {global_tick}: Node {source_node.node_id} "
+                f"'{source_node.symbolic_anchor}' received {weighted_input:.4f} "
+                f"energy (W={importance_weight}). Total: {source_node.resonance_energy:.4f}"
+            )
+
+            # Log memory event
+            self.memory_chain.append(
+                (global_tick, None, source_node.symbolic_anchor, weighted_input)
+            )
+
+            # Propagate if threshold exceeded
+            if source_node.resonance_energy >= source_node.threshold:
+                for target in self.nodes.values():
+                    if target == source_node:
+                        continue
+
+                    distance = source_node.distance_to(target)
+                    distance_factor = 1 / (distance**2 + epsilon)
+                    transferred_energy = weighted_input * dampening * distance_factor
+
+                    target.resonance_energy += transferred_energy
+                    target.last_tick = global_tick
+
+                    logs.append(
+                        f"Transferred {transferred_energy:.4f} to Node {target.node_id} "
+                        f"'{target.symbolic_anchor}' (Distance={distance:.2f})"
+                    )
+
+                    # Log the propagation in memory
+                    self.memory_chain.append(
+                        (
+                            global_tick,
+                            source_node.symbolic_anchor,
+                            target.symbolic_anchor,
+                            transferred_energy,
+                        )
+                    )
+
+            # Apply decay to all nodes
+            for node in self.nodes.values():
+                before_decay = node.resonance_energy
+                node.resonance_energy *= (1 - node.decay_factor)
+                logs.append(
+                    f"Node {node.node_id} '{node.symbolic_anchor}' decayed "
+                    f"from {before_decay:.4f} to {node.resonance_energy:.4f}"
+                )
+
+            return logs
+
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Error during propagate_resonance: %s", exc)
+            raise BrainKernelError("propagate_resonance failed") from exc
         
     def snapshot(self) -> List[str]:
         """Get current state of all nodes"""
@@ -171,72 +208,104 @@ class Nodefield:
 class ReinforcedNodefield(Nodefield):
     """Adds memory replay capabilities for consolidation"""
     
-    def replay_memory_chain(self, replay_weight: float = 1.0, 
-                          dampening: float = 0.5) -> List[str]:
-        """Replay memories to strengthen learning (like sleep/dreams)"""
-        logs = []
+    def replay_memory_chain(
+        self,
+        replay_weight: float = 1.0,
+        dampening: Optional[float] = None,
+    ) -> List[str]:
+        """Replay memories to strengthen learning (like sleep/dreams)
+
+        Parameters
+        ----------
+        replay_weight : float, optional
+            Weight for replay energy.
+        dampening : float | None, optional
+            Energy dampening factor. If *None*, fetches :pyattr:`CONFIG.dampening`.
+        """
+
+        dampening = CONFIG.dampening if dampening is None else dampening
+        logs: List[str] = []
         global global_tick
-        
+
         logs.append("\n--- REPLAYING MEMORY CHAIN FOR REINFORCEMENT ---")
-        
-        for tick, source_symbol, target_symbol, energy in self.memory_chain:
-            global_tick += 1
-            replay_energy = energy * replay_weight
+
+        try:
+            for tick, source_symbol, target_symbol, energy in self.memory_chain:
+                global_tick += 1
+                replay_energy = energy * replay_weight
+                
+                if source_symbol is None:
+                    # External stimulus
+                    target_node = next(n for n in self.nodes.values() 
+                                     if n.symbolic_anchor == target_symbol)
+                    target_node.resonance_energy += replay_energy
+                    target_node.last_tick = global_tick
+                    logs.append(f"Replay Tick {global_tick}: [External] -> "
+                               f"'{target_symbol}' | +{replay_energy:.4f} energy")
+                else:
+                    # Node to node transfer
+                    source_node = next(n for n in self.nodes.values() 
+                                     if n.symbolic_anchor == source_symbol)
+                    target_node = next(n for n in self.nodes.values() 
+                                     if n.symbolic_anchor == target_symbol)
+                    
+                    distance = source_node.distance_to(target_node)
+                    distance_factor = 1 / (distance**2 + 0.01)
+                    transferred_energy = replay_energy * dampening * distance_factor
+                    
+                    target_node.resonance_energy += transferred_energy
+                    target_node.last_tick = global_tick
+                    logs.append(f"Replay Tick {global_tick}: '{source_symbol}' -> "
+                               f"'{target_symbol}' | +{transferred_energy:.4f} energy")
+                
+                # Apply decay
+                for node in self.nodes.values():
+                    before = node.resonance_energy
+                    node.resonance_energy *= (1 - node.decay_factor)
             
-            if source_symbol is None:
-                # External stimulus
-                target_node = next(n for n in self.nodes.values() 
-                                 if n.symbolic_anchor == target_symbol)
-                target_node.resonance_energy += replay_energy
-                target_node.last_tick = global_tick
-                logs.append(f"Replay Tick {global_tick}: [External] -> "
-                           f"'{target_symbol}' | +{replay_energy:.4f} energy")
-            else:
-                # Node to node transfer
-                source_node = next(n for n in self.nodes.values() 
-                                 if n.symbolic_anchor == source_symbol)
-                target_node = next(n for n in self.nodes.values() 
-                                 if n.symbolic_anchor == target_symbol)
-                
-                distance = source_node.distance_to(target_node)
-                distance_factor = 1 / (distance**2 + 0.01)
-                transferred_energy = replay_energy * dampening * distance_factor
-                
-                target_node.resonance_energy += transferred_energy
-                target_node.last_tick = global_tick
-                logs.append(f"Replay Tick {global_tick}: '{source_symbol}' -> "
-                           f"'{target_symbol}' | +{transferred_energy:.4f} energy")
-            
-            # Apply decay
-            for node in self.nodes.values():
-                before = node.resonance_energy
-                node.resonance_energy *= (1 - node.decay_factor)
-                
-        return logs
+            return logs
+
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Error during replay_memory_chain: %s", exc)
+            raise BrainKernelError("replay_memory_chain failed") from exc
 
 
 class AbstractingNodefield(ReinforcedNodefield):
     """Adds abstraction formation from stabilized patterns"""
     
-    def derive_abstractions(self, abstraction_threshold: float = 1.0) -> Tuple[List[str], List[str]]:
+    def derive_abstractions(
+        self, abstraction_threshold: float | None = None
+    ) -> Tuple[List[str], List[str]]:
         """Form abstract concepts from stable energy patterns"""
-        logs = []
-        abstractions = []
-        
+        abstraction_threshold = (
+            CONFIG.activation_threshold if abstraction_threshold is None else abstraction_threshold
+        )
+        logs: List[str] = []
+        abstractions: List[str] = []
+
         logs.append("\n--- DERIVING ABSTRACTIONS ---")
-        
-        for node in self.nodes.values():
-            if node.resonance_energy >= abstraction_threshold:
-                abstraction_label = f"Abstract_{node.symbolic_anchor}"
-                abstractions.append(abstraction_label)
-                logs.append(f"Node '{node.symbolic_anchor}' stabilized with "
-                           f"energy {node.resonance_energy:.4f} → "
-                           f"Abstraction: '{abstraction_label}'")
-            else:
-                logs.append(f"Node '{node.symbolic_anchor}' energy "
-                           f"{node.resonance_energy:.4f} below threshold")
-                
-        return abstractions, logs
+
+        try:
+            for node in self.nodes.values():
+                if node.resonance_energy >= abstraction_threshold:
+                    abstraction_label = f"Abstract_{node.symbolic_anchor}"
+                    abstractions.append(abstraction_label)
+                    logs.append(
+                        f"Node '{node.symbolic_anchor}' stabilized with "
+                        f"energy {node.resonance_energy:.4f} → "
+                        f"Abstraction: '{abstraction_label}'"
+                    )
+                else:
+                    logs.append(
+                        f"Node '{node.symbolic_anchor}' energy "
+                        f"{node.resonance_energy:.4f} below threshold"
+                    )
+
+            return abstractions, logs
+
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Error during derive_abstractions: %s", exc)
+            raise BrainKernelError("derive_abstractions failed") from exc
 
 
 class SemanticAnalogicalNodefield(AbstractingNodefield):

@@ -8,6 +8,7 @@ from atlan_brain_kernel import (
     CognitiveNode, Nodefield, FullCognitiveAgent,
     global_tick
 )
+from atlan_kernel_config import KernelConfig
 
 
 class TestCognitiveNode:
@@ -65,6 +66,28 @@ class TestNodefield:
         
         assert len(field.memory_chain) > 0
         assert field.memory_chain[0][2] == "Node1"  # target symbol
+
+    def test_default_config_usage(self):
+        """propagate_resonance should use CONFIG.dampening when not supplied."""
+        field = Nodefield()
+        field.add_node((0, 0, 0), "test", "Src")
+        field.add_node((1, 0, 0), "test", "Tgt")
+
+        global global_tick
+        global_tick = 1
+        # Call without dampening arg
+        field.propagate_resonance((0, 0, 0), 2.0, 1.0)
+
+        # Call with explicit arg equal to default config; energies should differ by <1e-6
+        before = field.nodes[(1, 0, 0)].resonance_energy
+        # reset energies
+        for n in field.nodes.values():
+            n.resonance_energy = 0.0
+        global_tick += 1
+        field.propagate_resonance((0, 0, 0), 2.0, 1.0, KernelConfig().dampening)
+        after = field.nodes[(1, 0, 0)].resonance_energy
+
+        assert abs(before - after) < 1e-6
 
 
 class TestAbstraction:
