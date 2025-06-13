@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
+html {
+    font-size: 28px; /* large readable base */
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #001b44;
+}
+
+h2 {
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+}
+
+.btn-primary {
+    background-color: #ff6723;
+    border-color: #ff6723;
+    padding: 0.7rem 2rem;
+    font-size: 1.3rem;
+}
+
+.btn-secondary {
+    background-color: #415584;
+    border-color: #415584;
+    padding: 0.7rem 2rem;
+    font-size: 1.3rem;
+}
+
+.navbar-brand img {
+    height: 50px;
+}
+
+#node-search .Select-control {
+    min-height: 56px;
+    font-size: 1.3rem;
+}
+
+/* Mobile responsive stacking */
+@media (max-width: 576px) {
+    .control-bar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    .control-bar > * {
+        margin-bottom: 0.5rem !important;
+    }
+}
+
+pre, .event-feed {
+    font-size: 1rem;
+} 

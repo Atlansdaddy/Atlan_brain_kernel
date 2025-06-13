@@ -8,7 +8,7 @@ rather than traditional neural networks or transformers.
 
 import math
 import random
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import List, Tuple, Dict, Optional, Set
 import numpy as np
 import matplotlib.pyplot as plt
@@ -121,6 +121,11 @@ class Nodefield:
         # Performance options
         # ----------------------------------------------------------------
         self.vectorized = CONFIG.vectorized if vectorized is None else vectorized
+        
+        # ----------------------------------------------------------------
+        # Runtime event feed (for dashboards)
+        # ----------------------------------------------------------------
+        self.event_log: deque[str] = deque(maxlen=200)
         
     def add_node(self, position: Tuple[int, int, int], context_space: str,
                  symbolic_anchor: Optional[str] = None) -> CognitiveNode:
@@ -257,6 +262,8 @@ class Nodefield:
                     f"from {before_decay:.4f} to {node.resonance_energy:.4f}"
                 )
 
+            # push to event log
+            self.event_log.extend(logs)
             return logs
 
         except Exception as exc:  # noqa: BLE001
@@ -266,6 +273,27 @@ class Nodefield:
     def snapshot(self) -> List[str]:
         """Get current state of all nodes"""
         return [str(node) for node in self.nodes.values()]
+
+    # -----------------------------------------------------------------
+    # Dashboard helper: recent memory window
+    # -----------------------------------------------------------------
+
+    def get_recent_memory(self, window: int = 100):  # noqa: D401
+        """Return pandas DataFrame of last *window* memory events.
+
+        If pandas is not available, returns None.
+        """
+        try:
+            import pandas as pd  # lazy
+
+            mem: List[Tuple[int, str | None, str, float]] = list(self.memory_store.iterate())
+            mem.extend(getattr(self, "memory_chain", []))
+            if not mem:
+                return pd.DataFrame(columns=["tick", "source", "target", "energy"])
+            df = pd.DataFrame(mem[-window:], columns=["tick", "source", "target", "energy"])
+            return df
+        except ImportError:
+            return None
 
     # -----------------------------------------------------------------
     # Async API --------------------------------------------------------
@@ -356,6 +384,8 @@ class ReinforcedNodefield(Nodefield):
                     before = node.resonance_energy
                     node.resonance_energy *= (1 - node.decay_factor)
             
+            # push to event feed
+            self.event_log.extend(logs)
             return logs
 
         except Exception as exc:  # noqa: BLE001
