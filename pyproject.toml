@@ -1,0 +1,6 @@
+[project]
+name = "atlan-brain-kernel"
+version = "0.1.0"
+description = "Field-based cognitive architecture for emergent intelligence."
+authors = ["Mid-Atlantic AI LLC"]
+license = "BUSL-1.1" 
