@@ -102,6 +102,30 @@ class TestNodefield:
 
         assert field.nodes[(1, 0, 0)].resonance_energy > 0
 
+    def test_vectorized_flag(self):
+        """Vectorized propagation should approximate loop results."""
+        field_vec = Nodefield(vectorized=True)
+        field_loop = Nodefield(vectorized=False)
+
+        for pos in [(0, 0, 0), (1, 0, 0), (0, 1, 0)]:
+            field_vec.add_node(pos, "test", str(pos))
+            field_loop.add_node(pos, "test", str(pos))
+
+        global global_tick
+        global_tick = 1
+        e_in = 4.0
+        w = 0.7
+
+        field_vec.propagate_resonance((0, 0, 0), e_in, w)
+        field_loop.propagate_resonance((0, 0, 0), e_in, w)
+
+        # Compare energies of corresponding nodes (excluding source)
+        for pos in [(1, 0, 0), (0, 1, 0)]:
+            diff = abs(
+                field_vec.nodes[pos].resonance_energy - field_loop.nodes[pos].resonance_energy
+            )
+            assert diff < 1e-6
+
 
 class TestAbstraction:
     """Test abstraction formation"""
@@ -295,6 +319,29 @@ def test_importance_weights():
     low_energy = brain.nodes[(1, 0, 0)].resonance_energy
     
     assert high_energy > low_energy
+
+
+import tempfile, os
+
+
+class TestSQLiteStore:
+    def test_persistence_roundtrip(self):
+        from memory_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, "mem.sqlite")
+            store = SQLiteStore(db_path)
+            rec = (1, None, "A", 1.0)
+            store.append(rec)
+            store.flush()
+
+            store2 = SQLiteStore(db_path)
+            rows = list(store2.iterate())
+            assert rows[0] == rec
+
+            # Explicitly close to release file handle on Windows
+            store.close()
+            store2.close()
 
 
 if __name__ == "__main__":

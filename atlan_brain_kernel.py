@@ -20,6 +20,9 @@ import asyncio
 # Local configuration
 from atlan_kernel_config import KernelConfig
 
+# Memory persistence
+from memory_store import MemoryStore, InMemoryStore, SQLiteStore
+
 # ---------------------------------------------------------------------
 # Global configuration & logger
 # ---------------------------------------------------------------------
@@ -90,11 +93,34 @@ class Nodefield:
     energy propagates to form thoughts and memories
     """
     
-    def __init__(self, initial_size: int = 10):
-        self.nodes = {}
+    def __init__(
+        self,
+        initial_size: int = 10,
+        *,
+        memory_store: MemoryStore | None = None,
+        vectorized: bool | None = None,
+    ) -> None:
+        self.nodes: Dict[Tuple[int, int, int], CognitiveNode] = {}
         self.size = initial_size
         self.node_counter = 0
-        self.memory_chain = []  # temporal experience log
+
+        # ----------------------------------------------------------------
+        # Persistence setup
+        # ----------------------------------------------------------------
+
+        if memory_store is None:
+            # Default to fast in-memory store to maintain backward behaviour.
+            memory_store = InMemoryStore()
+
+        self.memory_store: MemoryStore = memory_store
+        self.memory_chain = (
+            self.memory_store.data if isinstance(memory_store, InMemoryStore) else []
+        )  # backward-compat
+
+        # ----------------------------------------------------------------
+        # Performance options
+        # ----------------------------------------------------------------
+        self.vectorized = CONFIG.vectorized if vectorized is None else vectorized
         
     def add_node(self, position: Tuple[int, int, int], context_space: str,
                  symbolic_anchor: Optional[str] = None) -> CognitiveNode:
@@ -154,37 +180,73 @@ class Nodefield:
             )
 
             # Log memory event
-            self.memory_chain.append(
+            self.memory_store.append(
                 (global_tick, None, source_node.symbolic_anchor, weighted_input)
             )
 
             # Propagate if threshold exceeded
             if source_node.resonance_energy >= source_node.threshold:
-                for target in self.nodes.values():
-                    if target == source_node:
-                        continue
+                if self.vectorized:
+                    # ---------------------------------------------------
+                    # NumPy vectorised path
+                    # ---------------------------------------------------
+                    nodes_list = list(self.nodes.values())
+                    coords = np.array([n.position for n in nodes_list])
+                    source_idx = nodes_list.index(source_node)
+                    source_coord = coords[source_idx]
 
-                    distance = source_node.distance_to(target)
-                    distance_factor = 1 / (distance**2 + epsilon)
-                    transferred_energy = weighted_input * dampening * distance_factor
+                    dist2 = np.sum((coords - source_coord) ** 2, axis=1) + epsilon
+                    dist2[source_idx] = np.inf  # skip self
+                    distance_factors = 1.0 / dist2
+                    transferred = weighted_input * dampening * distance_factors
 
-                    target.resonance_energy += transferred_energy
-                    target.last_tick = global_tick
+                    for idx, node in enumerate(nodes_list):
+                        if idx == source_idx:
+                            continue
+                        node.resonance_energy += transferred[idx]
+                        node.last_tick = global_tick
 
-                    logs.append(
-                        f"Transferred {transferred_energy:.4f} to Node {target.node_id} "
-                        f"'{target.symbolic_anchor}' (Distance={distance:.2f})"
-                    )
-
-                    # Log the propagation in memory
-                    self.memory_chain.append(
-                        (
-                            global_tick,
-                            source_node.symbolic_anchor,
-                            target.symbolic_anchor,
-                            transferred_energy,
+                        logs.append(
+                            f"Transferred {transferred[idx]:.4f} to Node {node.node_id} "
+                            f"'{node.symbolic_anchor}'"
                         )
-                    )
+
+                        self.memory_store.append(
+                            (
+                                global_tick,
+                                source_node.symbolic_anchor,
+                                node.symbolic_anchor,
+                                float(transferred[idx]),
+                            )
+                        )
+                else:
+                    # ---------------------------------------------------
+                    # Original Python loop path
+                    # ---------------------------------------------------
+                    for target in self.nodes.values():
+                        if target == source_node:
+                            continue
+
+                        distance = source_node.distance_to(target)
+                        distance_factor = 1 / (distance**2 + epsilon)
+                        transferred_energy = weighted_input * dampening * distance_factor
+
+                        target.resonance_energy += transferred_energy
+                        target.last_tick = global_tick
+
+                        logs.append(
+                            f"Transferred {transferred_energy:.4f} to Node {target.node_id} "
+                            f"'{target.symbolic_anchor}' (Distance={distance:.2f})"
+                        )
+
+                        self.memory_store.append(
+                            (
+                                global_tick,
+                                source_node.symbolic_anchor,
+                                target.symbolic_anchor,
+                                transferred_energy,
+                            )
+                        )
 
             # Apply decay to all nodes
             for node in self.nodes.values():
@@ -257,7 +319,11 @@ class ReinforcedNodefield(Nodefield):
         logs.append("\n--- REPLAYING MEMORY CHAIN FOR REINFORCEMENT ---")
 
         try:
-            for tick, source_symbol, target_symbol, energy in self.memory_chain:
+            # Combine persisted and in-memory chains to preserve backward compatibility.
+            mem: List[Tuple[int, str | None, str, float]] = list(self.memory_store.iterate())
+            mem.extend(getattr(self, "memory_chain", []))
+
+            for tick, source_symbol, target_symbol, energy in mem:
                 global_tick += 1
                 replay_energy = energy * replay_weight
                 
@@ -399,9 +465,13 @@ class PredictiveNodefield(SemanticAnalogicalNodefield):
         transition_counts = {}
         total_counts = {}
         
-        for i in range(len(self.memory_chain) - 1):
-            _, _, current_symbol, _ = self.memory_chain[i]
-            _, _, next_symbol, _ = self.memory_chain[i + 1]
+        # Combine persisted and in-memory chains to preserve backward compatibility.
+        mem: List[Tuple[int, str | None, str, float]] = list(self.memory_store.iterate())
+        mem.extend(getattr(self, "memory_chain", []))
+
+        for i in range(len(mem) - 1):
+            _, _, current_symbol, _ = mem[i]
+            _, _, next_symbol, _ = mem[i + 1]
             
             key = (current_symbol, next_symbol)
             transition_counts[key] = transition_counts.get(key, 0) + 1

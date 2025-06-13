@@ -14,5 +14,11 @@ class KernelConfig:
     dampening: float = 0.5            # Energy dampening during propagation
     epsilon: float = 0.01             # Small constant to avoid div-by-zero
 
+    # Performance -------------------------------------------------------
+    vectorized: bool = False          # Use NumPy vectorized propagation
+
+    # Persistence -------------------------------------------------------
+    db_path: str = "memory_chain.sqlite"  # SQLite DB for memory storage
+
     # Logging -------------------------------------------------------------
     log_level: str = "INFO"           # Default log level 
