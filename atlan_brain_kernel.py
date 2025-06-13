@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import logging
 from dataclasses import dataclass, field
+import asyncio
 
 # Local configuration
 from atlan_kernel_config import KernelConfig
@@ -203,6 +204,32 @@ class Nodefield:
     def snapshot(self) -> List[str]:
         """Get current state of all nodes"""
         return [str(node) for node in self.nodes.values()]
+
+    # -----------------------------------------------------------------
+    # Async API --------------------------------------------------------
+    # -----------------------------------------------------------------
+
+    async def propagate_resonance_async(
+        self,
+        source_position: Tuple[int, int, int],
+        input_energy: float,
+        importance_weight: float,
+        dampening: Optional[float] = None,
+    ) -> List[str]:
+        """Asynchronous wrapper around :py:meth:`propagate_resonance`.
+
+        Uses ``asyncio.to_thread`` so that CPU-bound computation does not block
+        the event loop, while reusing the existing, battle-tested synchronous
+        logic.
+        """
+
+        return await asyncio.to_thread(
+            self.propagate_resonance,
+            source_position,
+            input_energy,
+            importance_weight,
+            dampening,
+        )
 
 
 class ReinforcedNodefield(Nodefield):

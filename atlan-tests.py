@@ -89,6 +89,19 @@ class TestNodefield:
 
         assert abs(before - after) < 1e-6
 
+    @pytest.mark.asyncio
+    async def test_async_propagation(self):
+        """Ensure async wrapper produces same result."""
+        field = Nodefield()
+        field.add_node((0, 0, 0), "test", "Src")
+        field.add_node((1, 0, 0), "test", "Tgt")
+
+        global global_tick
+        global_tick = 1
+        await field.propagate_resonance_async((0, 0, 0), 3.0, 0.8)
+
+        assert field.nodes[(1, 0, 0)].resonance_energy > 0
+
 
 class TestAbstraction:
     """Test abstraction formation"""
